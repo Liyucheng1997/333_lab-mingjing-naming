@@ -2,6 +2,9 @@ import React, { useEffect, useMemo, useState } from 'react'
 import { createRoot } from 'react-dom/client'
 import { ArrowRight, CalendarDays, Check, ChevronDown, CircleUserRound, Download, Image, Languages, LoaderCircle, RefreshCw, Sparkles, WandSparkles } from 'lucide-react'
 import './styles.css'
+import { chartFor, fallbackNames } from './naming.js'
+
+const staticMode = import.meta.env.MODE === 'pages'
 
 const elementColors = { 木: '#4e7c5c', 火: '#b84c37', 土: '#ad7b43', 金: '#9a8352', 水: '#3f7284' }
 const styles = [
@@ -12,7 +15,7 @@ const styles = [
 ]
 
 function App() {
-  const [form, setForm] = useState({ surname: '林', gender: '不限', birthDate: '1995-08-18', birthTime: '09:30', city: '杭州', preferences: '清雅、明朗、有书卷气', ai: true })
+  const [form, setForm] = useState({ surname: '林', gender: '不限', birthDate: '1995-08-18', birthTime: '09:30', city: '杭州', preferences: '清雅、明朗、有书卷气', ai: !staticMode })
   const [status, setStatus] = useState({ connected: false, label: '检测中…' })
   const [result, setResult] = useState(null)
   const [activeName, setActiveName] = useState(0)
@@ -22,7 +25,7 @@ function App() {
   const [sigLoading, setSigLoading] = useState(false)
   const [notice, setNotice] = useState('')
 
-  useEffect(() => { fetch('/api/status').then(r => r.json()).then(setStatus).catch(() => setStatus({ connected: false, label: '离线模式' })) }, [])
+  useEffect(() => { if (staticMode) { setStatus({ connected: false, label: '在线词库版 · 数据仅在本机计算' }); return }; fetch('/api/status').then(r => r.json()).then(setStatus).catch(() => setStatus({ connected: false, label: '离线模式' })) }, [])
 
   const selected = result?.names?.[activeName]
   const update = (key) => (e) => setForm(v => ({ ...v, [key]: e.target.value }))
@@ -31,9 +34,16 @@ function App() {
     e?.preventDefault()
     setLoading(true); setNotice(''); setSignature(null)
     try {
+      let data
+      if (staticMode) {
+        if (!/^[\u3400-\u9fff]{1,2}$/.test(form.surname || '')) throw new Error('请输入 1–2 个汉字姓氏')
+        const chart = chartFor(form)
+        data = { chart, names: fallbackNames(form.surname, chart.favorable), source: 'offline' }
+      } else {
       const response = await fetch('/api/names', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(form) })
-      const data = await response.json()
+      data = await response.json()
       if (!response.ok) throw new Error(data.error)
+      }
       setResult(data); setActiveName(0)
       if (data.warning) setNotice(data.warning)
       setTimeout(() => document.querySelector('#results')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 80)
@@ -42,7 +52,7 @@ function App() {
   }
 
   async function generateSignature() {
-    if (!selected) return
+    if (!selected || staticMode) return
     setSigLoading(true); setNotice('')
     try {
       const response = await fetch('/api/signature', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ chinese: selected.chinese, english: selected.english, style: activeStyle, color: '朱砂墨' }) })
@@ -82,8 +92,8 @@ function App() {
             <label><span>名字气质</span><div className="input-wrap"><input className="no-icon" value={form.preferences} onChange={update('preferences')} /></div></label>
           </div>
           <div className="ai-row">
-            <div><WandSparkles size={19}/><span><b>Codex 深度命名</b><small>使用本地订阅综合音、形、义给出解释</small></span></div>
-            <button type="button" className={`toggle ${form.ai ? 'on' : ''}`} onClick={() => setForm(v => ({...v, ai: !v.ai}))}><span /></button>
+            <div><WandSparkles size={19}/><span><b>Codex 深度命名</b><small>{staticMode ? '在线版使用文化词库；AI 命名与高清签名需下载源码在本机运行。性别与气质偏好仅在 AI 模式生效。' : '使用本地订阅综合音、形、义给出解释'}</small></span></div>
+            <button type="button" disabled={staticMode} className={`toggle ${form.ai ? 'on' : ''}`} onClick={() => setForm(v => ({...v, ai: !v.ai}))}><span /></button>
           </div>
           <button className="primary" disabled={loading}>{loading ? <><LoaderCircle className="spin" size={19}/> 正在推演四柱与名字…</> : <>生成我的名字 <Sparkles size={18}/></>}</button>
         </form>
@@ -100,13 +110,13 @@ function App() {
             {styles.map(style => <button className={activeStyle === style.id ? 'selected' : ''} onClick={() => { setActiveStyle(style.id); setSignature(null) }} key={style.id}>
               <span className="style-mark">{style.mark}</span><span><b>{style.id}</b><small>{style.en} · {style.desc}</small></span>{activeStyle === style.id && <Check size={18}/>} 
             </button>)}
-            <button className="generate-signature" disabled={sigLoading} onClick={generateSignature}>{sigLoading ? <><LoaderCircle className="spin" size={18}/> Image Gen 创作中…</> : <><WandSparkles size={18}/> 生成高清签名</>}</button>
+            <button className="generate-signature" disabled={sigLoading || staticMode} onClick={generateSignature}>{sigLoading ? <><LoaderCircle className="spin" size={18}/> Image Gen 创作中…</> : <><WandSparkles size={18}/> {staticMode ? '高清签名需本机 AI 服务' : '生成高清签名'}</>}</button>
           </div>
           <div className={`signature-canvas style-${styles.findIndex(s => s.id === activeStyle)}`}>
             {signature ? <img src={signature} alt={`${selected.chinese} 签名设计`} /> : <div className="signature-preview">
               <span className="sig-cn">{selected.chinese}</span><span className="sig-en">{selected.english}</span><i>明境制</i>
             </div>}
-            <div className="canvas-tools"><span>{signature ? 'Image Gen 高清成稿' : '实时版式预览'}</span>{signature && <a href={signature} download><Download size={16}/> 下载</a>}<button onClick={generateSignature}><RefreshCw size={15}/></button></div>
+            <div className="canvas-tools"><span>{signature ? 'Image Gen 高清成稿' : '实时版式预览'}</span>{signature && <a href={signature} download><Download size={16}/> 下载</a>}<button disabled={staticMode} onClick={generateSignature}><RefreshCw size={15}/></button></div>
           </div>
         </div>
       </section>}

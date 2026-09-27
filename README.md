@@ -26,3 +26,12 @@ npm start
 - 风格：行云行书、雅正楷书、古意篆书、极简现代。
 
 > 八字与五行内容属于传统文化体验，仅作命名灵感参考，不代表确定性判断。
+
+
+## GitHub Pages 在线版
+
+https://liyucheng1997.github.io/333_lab-mingjing-naming/
+
+在线版在浏览器计算四柱并使用现有文化词库起名，支持签名版式预览；性别与气质偏好、AI 深度命名、高清签名生成需本机 Codex 服务。
+
+`npm run build -- --mode pages` 构建纯静态版；普通构建保留本机服务功能。
